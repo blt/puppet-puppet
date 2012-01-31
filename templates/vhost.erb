@@ -1,0 +1,51 @@
+server {
+  # I'm assuming that 'puppet' resolves to a private IP. Don't run Puppet on the public internet!
+  listen puppet:8140;
+
+  ssl on;
+  ssl_certificate /var/lib/puppet/ssl/certs/puppet.pem;
+  ssl_certificate_key /var/lib/puppet/ssl/private_keys/puppet.pem;
+  ssl_ciphers ALL:-ADH:+HIGH:+MEDIUM:-LOW:-SSLv2:-EXP;
+  ssl_client_certificate  /var/lib/puppet/ssl/ca/ca_crt.pem;
+  ssl_verify_client optional;
+
+  # Force all filetypes to be sent raw. (Ouch!)
+  types { }
+  default_type application/x-raw;
+
+  # serving static files from mount point
+  location /production/file_content/files/ {
+    ## problem here is that puppet factor doesn't give compact CIDR for network
+    # allow   <%= network_eth1 %>/16;
+    # deny    all;
+
+    alias /etc/puppet/files/;
+  }
+
+  # serving static files from modules mounts
+  location ~ /production/file_content/[^/]+/files/ {
+    ## see above
+    # allow   <%= network_eth1 %>/16;
+    # deny    all;
+
+    root /etc/puppet/modules;
+
+    # rewrite /production/file_content/module/files/file.txt
+    # to /module/file.text
+    rewrite ^/production/file_content/([^/]+)/files/(.+)$  $1/$2 break;
+  }
+
+  location / {
+    proxy_pass http://puppet-production;
+    proxy_redirect   off;
+    proxy_set_header Host             $host;
+    proxy_set_header X-Real-IP        $remote_addr;
+    proxy_set_header X-Forwarded-For  $proxy_add_x_forwarded_for;
+    proxy_set_header X-Client-Verify  $ssl_client_verify;
+    proxy_set_header X-Client-Verify  SUCCESS;
+    proxy_set_header X-Client-DN      $ssl_client_s_dn;
+    proxy_set_header X-SSL-Subject    $ssl_client_s_dn;
+    proxy_set_header X-SSL-Issuer     $ssl_client_i_dn;
+  }
+}
+
