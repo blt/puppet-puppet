@@ -1,0 +1,20 @@
+#!/bin/sh -e
+
+alias log="/usr/bin/logger -t 'redeploy-puppet'"
+
+# Read the input in, even if it is not new-line terminated.
+IFS='' read -r LINE || [ -n "$LINE" ]
+project=`echo $LINE | awk '{ print $1 }'`
+rev=`echo $LINE | awk '{ print $2 }'`
+
+mnt="/mnt/slugs/${project}/${project}_${rev}"
+sqsh="/var/lib/slugs/${project}/${project}_${rev}.sqsh"
+
+mkdir -p $mnt
+log "mounting ${sqsh} at ${mnt}"
+mount -t squashfs ${sqsh} ${mnt} -o loop
+log "rewriting /etc/puppet link to ${mnt}"
+ln -sf $mnt /etc/puppet
+
+mkdir -p /etc/fstab.d/
+echo "${sqsh} ${mnt} squashfs ro,defaults 0 0" > /etc/fstab.d/puppet
